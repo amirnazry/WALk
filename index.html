@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>بیسیم آنلاین</title>
+  <style>
+    body {
+      font-family: Tahoma, sans-serif;
+      text-align: center;
+      background: #222;
+      color: #fff;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 { color: #0f0; }
+    #status { margin: 20px; font-weight: bold; }
+    #talkBtn {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: #c00;
+      border: 4px solid #f00;
+      font-size: 18px;
+      color: white;
+      cursor: pointer;
+      transition: 0.2s;
+      margin: 30px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #talkBtn:active, #talkBtn.talking {
+      background: #0f0;
+      border-color: #0c0;
+      transform: scale(1.1);
+    }
+    #roomInput { width: 200px; padding: 10px; text-align: center; }
+    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    .info { font-size: 14px; color: #aaa; margin-top: 30px; }
+  </style>
+</head>
+<body>
+  <h1>🎤 بیسیم آنلاین</h1>
+  <p>فشار بده و صحبت کن!</p>
+
+  <input type="text" id="roomInput" placeholder="نام اتاق (مثال: room1)" value="room1"/>
+  <button onclick="joinRoom()">ورود به اتاق</button>
+
+  <div id="status">وارد اتاق شوید...</div>
+  <button id="talkBtn" style="display:none;">فشار بده<br>و صحبت کن</button>
+
+  <div class="info">
+    لینک این صفحه را برای دوستتان بفرستید و نام اتاق یکسان وارد کنید.
+  </div>
+
+  <script>
+    let localStream;
+    let peerConnection;
+    let isTalking = false;
+    const talkBtn = document.getElementById('talkBtn');
+    const status = document.getElementById('status');
+    const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+    const signalingServer = new WebSocket('wss://signaling.walkietalkie.ir'); // سرور سیگنالینگ رایگان (یا خودت راه بنداز)
+
+    signalingServer.onmessage = async (msg) => {
+      const data = JSON.parse(msg.data);
+      if (data.offer) {
+        await handleOffer(data.offer);
+      } else if (data.answer) {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+      } else if (data.candidate) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    };
+
+    async function joinRoom() {
+      const room = document.getElementById('roomInput').value.trim() || 'room1';
+      status.textContent = `در حال ورود به اتاق: ${room}...`;
+      talkBtn.style.display = 'flex';
+
+      // دسترسی به میکروفون
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      initPeerConnection();
+
+      signalingServer.onopen = () => {
+        signalingServer.send(JSON.stringify({ join: room }));
+      };
+    }
+
+    function initPeerConnection() {
+      peerConnection = new RTCPeerConnection(config);
+
+      localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream);
+      });
+
+      peerConnection.ontrack = (event) => {
+        const audio = new Audio();
+        audio.srcObject = event.streams[0];
+        audio.play();
+      };
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          signalingServer.send(JSON.stringify({ candidate: event.candidate }));
+        }
+      };
+
+      // ایجاد offer اگر اول باشی
+      signalingServer.onmessage = async (msg) => {
+        const data = JSON.parse(msg.data);
+        if (data.join && !peerConnection.remoteDescription) {
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          signalingServer.send(JSON.stringify({ offer }));
+        }
+      };
+    }
+
+    async function handleOffer(offer) {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      signalingServer.send(JSON.stringify({ answer }));
+    }
+
+    // Push to Talk
+    talkBtn.addEventListener('mousedown', startTalking);
+    talkBtn.addEventListener('mouseup', stopTalking);
+    talkBtn.addEventListener('touchstart', startTalking);
+    talkBtn.addEventListener('touchend', stopTalking);
+
+    function startTalking(e) {
+      e.preventDefault();
+      if (!localStream) return;
+      isTalking = true;
+      talkBtn.classList.add('talking');
+      localStream.getAudioTracks()[0].enabled = true;
+      status.textContent = 'در حال صحبت...';
+    }
+
+    function stopTalking() {
+      if (!isTalking) return;
+      isTalking = false;
+      talkBtn.classList.remove('talking');
+      localStream.getAudioTracks()[0].enabled = false;
+      status.textContent = 'در حال شنیدن...';
+    }
+
+    // قطع ارتباط موقع خروج
+    window.onbeforeunload = () => {
+      signalingServer.close();
+      peerConnection?.close();
+    };
+  </script>
+</body>
+</html>
