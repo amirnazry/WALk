@@ -12,6 +12,7 @@
       --secondary: #00cc66;
       --text: #e0ffe0;
       --dark: #001a0a;
+      --error: #ff4444;
       --light: #00ff88;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -49,6 +50,7 @@
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
 
     .hidden { display: none; }
+    .error { color: var(--error); font-weight: bold; margin: 1rem 0; }
     footer { margin-top: auto; font-size: 0.8rem; color: #00cc66; padding-top: 2rem; }
 
     @media (max-width: 600px) {
@@ -64,8 +66,8 @@
   <div id="home">
     <h1>Walky Talky</h1>
     <button id="createRoom">ساخت اتاق</button>
-    <input id="joinCode" placeholder="کد ۶ رقمی" maxlength="6">
-    <button id="joinRoom">ورود به اتاق</button>
+    <p>یا از لینک دعوت استفاده کن</p>
+    <div id="errorMsg" class="error hidden"></div>
   </div>
 
   <!-- صفحه اتاق -->
@@ -85,8 +87,7 @@
     const home = document.getElementById('home');
     const roomDiv = document.getElementById('room');
     const createBtn = document.getElementById('createRoom');
-    const joinCodeInput = document.getElementById('joinCode');
-    const joinBtn = document.getElementById('joinRoom');
+    const errorMsg = document.getElementById('errorMsg');
     const roomCodeSpan = document.getElementById('roomCode');
     const shareLink = document.getElementById('shareLink');
     const talkBtn = document.getElementById('talkBtn');
@@ -96,30 +97,31 @@
     let peer, conn, sender, localStream, roomCode, isHolding = false, audioCtx, analyser, dataArray;
     let myPeerId, remotePeerId;
 
-    // بررسی لینک یا ذخیره قبلی
+    // چک کردن لینک دعوت (فقط اگر از لینک اومده باشه)
     const urlParams = new URLSearchParams(location.search);
     const urlRoom = urlParams.get('room');
-    const savedRoom = localStorage.getItem('walkyRoom');
-    if (urlRoom && /^\d{6}$/.test(urlRoom)) {
-      enterRoom(urlRoom);
-    } else if (savedRoom && /^\d{6}$/.test(savedRoom)) {
-      enterRoom(savedRoom);
+    const urlPeer = urlParams.get('peer');
+
+    // اگر لینک دعوت داره و peer مشخصه → وارد اتاق شو
+    if (urlRoom && urlPeer && /^\d{6}$/.test(urlRoom)) {
+      // چک می‌کنیم آیا این کد قبلاً ساخته شده؟
+      const createdRooms = JSON.parse(sessionStorage.getItem('walkyRooms') || '{}');
+      if (createdRooms[urlRoom]) {
+        enterRoom(urlRoom, urlPeer);
+      } else {
+        showError('اتاق پیدا نشد! کد اشتباه است یا منقضی شده.');
+      }
     }
 
     createBtn.onclick = () => {
       const code = Math.floor(100000 + Math.random() * 900000).toString();
+      // ذخیره کد در sessionStorage تا فقط از طریق لینک قابل دسترسی باشه
+      const createdRooms = JSON.parse(sessionStorage.getItem('walkyRooms') || '{}');
+      createdRooms[code] = true;
+      sessionStorage.setItem('walkyRooms', JSON.stringify(createdRooms));
+
       localStorage.setItem('walkyRoom', code);
       enterRoom(code);
-    };
-
-    joinBtn.onclick = () => {
-      const code = joinCodeInput.value.trim();
-      if (/^\d{6}$/.test(code)) {
-        localStorage.setItem('walkyRoom', code);
-        enterRoom(code);
-      } else {
-        alert('کد باید ۶ رقم باشه!');
-      }
     };
 
     leaveBtn.onclick = () => {
@@ -127,14 +129,14 @@
       location.href = location.pathname;
     };
 
-    async function enterRoom(code) {
+    async function enterRoom(code, existingPeerId = null) {
       roomCode = code;
       home.classList.add('hidden');
       roomDiv.classList.remove('hidden');
       roomCodeSpan.textContent = code;
 
       const baseUrl = `${location.origin}${location.pathname}`;
-      shareLink.textContent = `${baseUrl}?room=${code}`;
+      shareLink.textContent = `${baseUrl}?room=${code}&peer=WAITING`;
       history.replaceState({}, '', `${baseUrl}?room=${code}`);
 
       usersList.innerHTML = `<li>You (در حال اتصال...)</li>`;
@@ -147,20 +149,19 @@
         return;
       }
 
-      peer = new Peer(); // PeerJS ID واقعی
+      peer = new Peer();
       peer.on('open', id => {
         myPeerId = id;
         usersList.innerHTML = `<li>You (${id.slice(0,6)})</li>`;
 
-        // ذخیره Peer ID در URL برای اتصال بعدی
-        const peerUrl = new URL(location);
-        peerUrl.searchParams.set('peer', id);
-        history.replaceState({}, '', peerUrl);
+        // به‌روزرسانی لینک با peer واقعی
+        const finalUrl = `${baseUrl}?room=${code}&peer=${id}`;
+        shareLink.textContent = finalUrl;
+        history.replaceState({}, '', finalUrl);
 
-        // اگر کسی قبلاً در اتاق بوده، بهش زنگ بزن
-        const existingPeer = urlParams.get('peer');
-        if (existingPeer && existingPeer !== id) {
-          conn = peer.call(existingPeer, localStream);
+        // اگر کسی قبلاً در اتاق بوده (joiner)
+        if (existingPeerId && existingPeerId !== 'WAITING') {
+          conn = peer.call(existingPeerId, localStream);
           setupConnection(conn);
         }
 
@@ -248,6 +249,11 @@
       gain.gain.value = 0.05;
       source.connect(gain).connect(audioCtx.destination);
       source.start(); source.stop(audioCtx.currentTime + 0.1);
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.remove('hidden');
     }
   </script>
 </body>
