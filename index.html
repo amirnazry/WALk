@@ -68,8 +68,10 @@
       const room =
         location.pathname.split("/room/")[1] ||
         Math.random().toString(36).substr(2, 6);
-      if (!location.pathname.includes("/room/"))
-        location.href = location.origin + "/room/" + room;
+      if (!location.pathname.includes('/room/')) {
+  history.replaceState({}, '', '/room/' + room);
+}
+
       document.getElementById(
         "link"
       ).innerHTML = `<a href="">${location.href}</a>`;
