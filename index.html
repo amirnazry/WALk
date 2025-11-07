@@ -1,3 +1,4 @@
+@@ -1,175 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,255 +7,197 @@
   <title>Walky Talky</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    :root {
-      --bg: #0a1a0a;
-      --primary: #00ff88;
-      --secondary: #00cc66;
-      --text: #e0ffe0;
-      --dark: #001a0a;
-      --error: #ff4444;
-      --light: #00ff88;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg); color: var(--text); font-family: 'Courier New', monospace;
-      text-align: center; min-height: 100vh; display: flex; flex-direction: column; justify-content: center;
-      padding: 2rem 1rem; line-height: 1.6;
-    }
-    h1 { font-size: 2.2rem; margin-bottom: 1.5rem; color: var(--primary); text-shadow: 0 0 15px var(--light); }
-    input, button {
-      font-family: inherit; font-size: 1.1rem; padding: 0.9rem; margin: 0.5rem; border: none; border-radius: 12px; width: 200px;
-    }
-    input { background: var(--dark); color: var(--text); text-align: center; }
-    button {
-      background: var(--primary); color: #000; cursor: pointer; font-weight: bold; transition: 0.2s;
-      box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
-    }
-    button:hover, button:active { background: #00cc66; transform: scale(0.98); }
+    body { margin: 0; padding: 2rem 1rem; background: #000; color: #FFD700; font-family: 'Courier New', monospace; text-align: center; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+    h1 { font-size: 2.5rem; margin: 0 0 1rem; text-shadow: 0 0 10px #FFD700; }
+    p { font-size: 1rem; margin: 0.5rem 0; }
+    #roomLink { background: #333; padding: 0.5rem; border-radius: 5px; word-break: break-all; font-family: monospace; }
+    #talkBtn { background: #FFD700; color: #000; border: none; border-radius: 50%; width: 120px; height: 120px; font-size: 3rem; cursor: pointer; box-shadow: 0 0 20px #FFD700; transition: all 0.1s; margin: 2rem 0; }
+    #talkBtn:active, #talkBtn.hold { transform: scale(0.95); box-shadow: 0 0 40px #fff; background: #fff; }
 
-    #talkBtn {
-      background: var(--primary); color: #000; width: 150px; height: 150px; font-size: 3.8rem;
-      border-radius: 50%; margin: 2rem auto; box-shadow: 0 0 30px var(--light); transition: 0.15s;
-      display: flex; align-items: center; justify-content: center;
-    }
-    #talkBtn.hold {
-      background: #fff; transform: scale(0.9); box-shadow: 0 0 60px #fff;
-    }
 
-    #roomCode { font-size: 1.8rem; font-weight: bold; color: var(--primary); background: var(--dark); padding: 0.6rem 1.2rem; border-radius: 12px; margin: 1rem 0; }
-    #shareLink { background: var(--dark); padding: 0.6rem; border-radius: 12px; word-break: break-all; margin: 1rem 0; font-size: 0.9rem; }
 
-    #users { list-style: none; padding: 0; margin: 1.5rem 0; }
-    #users li { background: var(--dark); padding: 0.6rem; margin: 0.3rem; border-radius: 8px; font-size: 1rem; }
-    #users li.speaking { background: var(--primary); color: #000; animation: pulse 1s infinite; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
 
-    .hidden { display: none; }
-    .error { color: var(--error); font-weight: bold; margin: 1rem 0; }
-    footer { margin-top: auto; font-size: 0.8rem; color: #00cc66; padding-top: 2rem; }
 
-    @media (max-width: 600px) {
-      #talkBtn { width: 170px; height: 170px; font-size: 4.5rem; }
-      h1 { font-size: 1.8rem; }
-      input, button { width: 180px; }
-    }
+
+
+
+
+
+
+    #users { list-style: none; padding: 0; margin: 1rem 0; }
+    #users li { padding: 0.5rem; background: #333; margin: 0.25rem; border-radius: 5px; }
+    #users li.speaking { background: #FFD700; color: #000; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    footer { margin-top: auto; font-size: 0.8rem; color: #666; }
+    @media (max-width: 600px) { #talkBtn { width: 100px; height: 100px; font-size: 2.5rem; } h1 { font-size: 2rem; } }
+
+
+
+
+
   </style>
 </head>
 <body>
-
-  <!-- صفحه اصلی -->
-  <div id="home">
-    <h1>Walky Talky</h1>
-    <button id="createRoom">ساخت اتاق</button>
-    <p>یا از لینک دعوت استفاده کن</p>
-    <div id="errorMsg" class="error hidden"></div>
-  </div>
-
-  <!-- صفحه اتاق -->
-  <div id="room" class="hidden">
-    <h1>اتاق: <span id="roomCode"></span></h1>
-    <button id="talkBtn">Microphone</button>
-    <p>لینک رو کپی کن و بفرست:</p>
-    <p id="shareLink"></p>
-    <ul id="users"></ul>
-    <button id="leaveRoom" style="background:#ff4444; margin-top:1.5rem;">ترک اتاق</button>
-  </div>
-
+  <h1>Walky Talky</h1>
+  <p id="status">Connecting...</p>
+  <button id="talkBtn" title="Hold to talk" disabled>🎤</button>
+  <p>Share this link with a friend. Hold spacebar or tap to talk. Release to listen.</p>
+  <p id="roomLink">Generating room...</p>
+  <ul id="users">
+    <li>You (waiting...)</li>
+  </ul>
   <audio id="remoteAudio" autoplay></audio>
   <footer>Made for quick chats. Over and out.</footer>
 
   <script>
-    const home = document.getElementById('home');
-    const roomDiv = document.getElementById('room');
-    const createBtn = document.getElementById('createRoom');
-    const errorMsg = document.getElementById('errorMsg');
-    const roomCodeSpan = document.getElementById('roomCode');
-    const shareLink = document.getElementById('shareLink');
-    const talkBtn = document.getElementById('talkBtn');
-    const usersList = document.getElementById('users');
-    const leaveBtn = document.getElementById('leaveRoom');
+    (async () => {
+      const peer = new Peer();
+      const talkBtn = document.getElementById('talkBtn');
+      const status = document.getElementById('status');
+      const roomLinkEl = document.getElementById('roomLink');
+      const usersList = document.getElementById('users');
+      const remoteAudio = document.getElementById('remoteAudio');
+      let localStream, conn, sender, audioCtx, isHolding = false, myPeerId, remotePeerId, analyser, dataArray, remoteUserLi;
 
-    let peer, conn, sender, localStream, roomCode, isHolding = false, audioCtx, analyser, dataArray;
-    let myPeerId, remotePeerId;
-
-    // چک کردن لینک دعوت (فقط اگر از لینک اومده باشه)
-    const urlParams = new URLSearchParams(location.search);
-    const urlRoom = urlParams.get('room');
-    const urlPeer = urlParams.get('peer');
-
-    // اگر لینک دعوت داره و peer مشخصه → وارد اتاق شو
-    if (urlRoom && urlPeer && /^\d{6}$/.test(urlRoom)) {
-      // چک می‌کنیم آیا این کد قبلاً ساخته شده؟
-      const createdRooms = JSON.parse(sessionStorage.getItem('walkyRooms') || '{}');
-      if (createdRooms[urlRoom]) {
-        enterRoom(urlRoom, urlPeer);
-      } else {
-        showError('اتاق پیدا نشد! کد اشتباه است یا منقضی شده.');
-      }
-    }
-
-    createBtn.onclick = () => {
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      // ذخیره کد در sessionStorage تا فقط از طریق لینک قابل دسترسی باشه
-      const createdRooms = JSON.parse(sessionStorage.getItem('walkyRooms') || '{}');
-      createdRooms[code] = true;
-      sessionStorage.setItem('walkyRooms', JSON.stringify(createdRooms));
-
-      localStorage.setItem('walkyRoom', code);
-      enterRoom(code);
-    };
-
-    leaveBtn.onclick = () => {
-      localStorage.removeItem('walkyRoom');
-      location.href = location.pathname;
-    };
-
-    async function enterRoom(code, existingPeerId = null) {
-      roomCode = code;
-      home.classList.add('hidden');
-      roomDiv.classList.remove('hidden');
-      roomCodeSpan.textContent = code;
-
-      const baseUrl = `${location.origin}${location.pathname}`;
-      shareLink.textContent = `${baseUrl}?room=${code}&peer=WAITING`;
-      history.replaceState({}, '', `${baseUrl}?room=${code}`);
-
-      usersList.innerHTML = `<li>You (در حال اتصال...)</li>`;
-
+      // Audio context for sounds & analysis
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Get local stream
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        status.textContent = 'Mic ready. Getting peer ID...';
       } catch (err) {
-        alert('دسترسی به میکروفون رد شد!');
+        status.textContent = 'Mic access denied. Enable to chat.';
         return;
       }
 
-      peer = new Peer();
-      peer.on('open', id => {
-        myPeerId = id;
-        usersList.innerHTML = `<li>You (${id.slice(0,6)})</li>`;
+      // Check if joining
+      const url = new URL(window.location);
+      const providedId = url.searchParams.get('id');
 
-        // به‌روزرسانی لینک با peer واقعی
-        const finalUrl = `${baseUrl}?room=${code}&peer=${id}`;
-        shareLink.textContent = finalUrl;
-        history.replaceState({}, '', finalUrl);
-
-        // اگر کسی قبلاً در اتاق بوده (joiner)
-        if (existingPeerId && existingPeerId !== 'WAITING') {
-          conn = peer.call(existingPeerId, localStream);
+      peer.on('open', (myId) => {
+        myPeerId = myId;
+        usersList.innerHTML = `<li>You (${myId.slice(0,8)})</li>`;
+        if (providedId) {
+          // Joiner
+          status.textContent = `Joining ${providedId.slice(0,8)}...`;
+          conn = peer.call(providedId, localStream);
           setupConnection(conn);
+          roomLinkEl.textContent = window.location.href;
+        } else {
+          // Host
+          url.searchParams.set('id', myId);
+          history.replaceState({}, '', url);
+          roomLinkEl.textContent = window.location.href;
+          status.textContent = `Room ready: ${myId.slice(0,8)}. Share link!`;
+          talkBtn.disabled = false;
+          peer.on('call', (incoming) => {
+            conn = incoming;
+            conn.answer(localStream);
+            setupConnection(conn);
+            status.textContent = 'Connected! Hold to talk.';
+          });
         }
+      });
 
-        // منتظر تماس از نفر جدید
-        peer.on('call', incoming => {
-          conn = incoming;
-          conn.answer(localStream);
-          setupConnection(conn);
+      function setupConnection(connection) {
+        sender = connection.peerConnection.getSenders().find(s => s.track?.kind === 'audio');
+        connection.on('stream', (remoteStream) => {
+          remoteAudio.srcObject = remoteStream;
+          remotePeerId = connection.peer; // Get remote peer ID
+          remoteUserLi = document.createElement('li');
+          remoteUserLi.textContent = `Friend (${remotePeerId.slice(0,8)})`;
+          usersList.appendChild(remoteUserLi);
+          talkBtn.disabled = false;
+          status.textContent = 'Connected! Hold to talk.';
+          // Setup audio analysis for remote speaking
+          const source = audioCtx.createMediaStreamSource(remoteStream);
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          const bufferLength = analyser.frequencyBinCount;
+          dataArray = new Uint8Array(bufferLength);
+          source.connect(analyser);
+          detectSpeaking();
         });
-      });
-    }
-
-    function setupConnection(connection) {
-      sender = connection.peerConnection.getSenders().find(s => s.track?.kind === 'audio');
-      connection.on('stream', remoteStream => {
-        remotePeerId = connection.peer;
-        const li = document.createElement('li');
-        li.textContent = `دوست (${remotePeerId.slice(0,6)})`;
-        li.id = 'remoteUser';
-        usersList.appendChild(li);
-
-        const source = audioCtx.createMediaStreamSource(remoteStream);
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
-        source.connect(analyser);
-        detectSpeaking();
-      });
-    }
-
-    function detectSpeaking() {
-      if (!analyser) return;
-      requestAnimationFrame(detectSpeaking);
-      analyser.getByteFrequencyData(dataArray);
-      const volume = dataArray.reduce((a,b) => a+b) / dataArray.length;
-      const remoteLi = document.getElementById('remoteUser');
-      if (remoteLi) {
-        remoteLi.classList.toggle('speaking', volume > 12);
       }
-    }
 
-    function startTalk() {
-      if (!sender || isHolding) return;
-      isHolding = true;
-      talkBtn.classList.add('hold');
-      sender.track.enabled = true;
-      usersList.children[0].classList.add('speaking');
-      playBeep();
-    }
+      // Detect remote speaking via volume
+      function detectSpeaking() {
+        if (!analyser) return;
+        const avg = (array) => array.reduce((a, b) => a + b) / array.length;
+        requestAnimationFrame(detectSpeaking);
+        analyser.getByteFrequencyData(dataArray);
+        const volume = avg(dataArray);
+        if (volume > 10) { // Threshold - adjust if needed
+          remoteUserLi.classList.add('speaking');
+        } else {
+          remoteUserLi.classList.remove('speaking');
+        }
+      }
 
-    function stopTalk() {
-      if (!isHolding) return;
-      isHolding = false;
-      talkBtn.classList.remove('hold');
-      sender.track.enabled = false;
-      usersList.children[0].classList.remove('speaking');
-      playStatic();
-    }
+      // Hold to talk (self speaking)
+      function startTalk() {
+        if (!sender || isHolding || talkBtn.disabled) return;
+        isHolding = true;
+        talkBtn.classList.add('hold');
+        sender.track.enabled = true;
+        usersList.children[0].classList.add('speaking'); // You speaking
+        playBeep();
+      }
 
-    talkBtn.addEventListener('mousedown', startTalk);
-    talkBtn.addEventListener('touchstart', startTalk, { passive: true });
-    document.addEventListener('mouseup', stopTalk);
-    document.addEventListener('touchend', stopTalk);
-    document.addEventListener('keydown', e => { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); startTalk(); } });
-    document.addEventListener('keyup', e => { if (e.code === 'Space') stopTalk(); });
+      function stopTalk() {
+        if (!isHolding) return;
+        isHolding = false;
+        talkBtn.classList.remove('hold');
+        sender.track.enabled = false;
+        usersList.children[0].classList.remove('speaking'); // Stop self
+        playStatic();
+      }
 
-    function playBeep() {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.frequency.value = 900;
-      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-      osc.start(); osc.stop(audioCtx.currentTime + 0.1);
-    }
+      // Events
+      talkBtn.addEventListener('mousedown', startTalk);
+      talkBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startTalk(); });
+      document.addEventListener('mouseup', stopTalk);
+      document.addEventListener('touchend', stopTalk);
+      document.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); startTalk(); } });
+      document.addEventListener('keyup', (e) => { if (e.code === 'Space') stopTalk(); });
 
-    function playStatic() {
-      const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-      const source = audioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioCtx.destination);
-      const gain = audioCtx.createGain();
-      gain.gain.value = 0.05;
-      source.connect(gain).connect(audioCtx.destination);
-      source.start(); source.stop(audioCtx.currentTime + 0.1);
-    }
 
-    function showError(msg) {
-      errorMsg.textContent = msg;
-      errorMsg.classList.remove('hidden');
-    }
+
+
+
+
+
+
+
+
+      // Sounds
+      function playBeep() {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = 800;
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+      }
+
+      function playStatic() {
+        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        const gain = audioCtx.createGain();
+        source.connect(gain).connect(audioCtx.destination);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+        source.start();
+        source.stop(audioCtx.currentTime + 0.1);
+      }
+    })();
   </script>
 </body>
 </html>
