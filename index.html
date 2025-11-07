@@ -12,6 +12,10 @@
     #roomLink { background: #333; padding: 0.5rem; border-radius: 5px; word-break: break-all; font-family: monospace; }
     #talkBtn { background: #FFD700; color: #000; border: none; border-radius: 50%; width: 120px; height: 120px; font-size: 3rem; cursor: pointer; box-shadow: 0 0 20px #FFD700; transition: all 0.1s; margin: 2rem 0; }
     #talkBtn:active, #talkBtn.hold { transform: scale(0.95); box-shadow: 0 0 40px #fff; background: #fff; }
+    #users { list-style: none; padding: 0; margin: 1rem 0; }
+    #users li { padding: 0.5rem; background: #333; margin: 0.25rem; border-radius: 5px; }
+    #users li.speaking { background: #FFD700; color: #000; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     footer { margin-top: auto; font-size: 0.8rem; color: #666; }
     @media (max-width: 600px) { #talkBtn { width: 100px; height: 100px; font-size: 2.5rem; } h1 { font-size: 2rem; } }
   </style>
@@ -22,6 +26,9 @@
   <button id="talkBtn" title="Hold to talk" disabled>🎤</button>
   <p>Share this link with a friend. Hold spacebar or tap to talk. Release to listen.</p>
   <p id="roomLink">Generating room...</p>
+  <ul id="users">
+    <li>You (waiting...)</li>
+  </ul>
   <audio id="remoteAudio" autoplay></audio>
   <footer>Made for quick chats. Over and out.</footer>
 
@@ -31,13 +38,14 @@
       const talkBtn = document.getElementById('talkBtn');
       const status = document.getElementById('status');
       const roomLinkEl = document.getElementById('roomLink');
+      const usersList = document.getElementById('users');
       const remoteAudio = document.getElementById('remoteAudio');
-      let localStream, conn, sender, audioCtx, isHolding = false, myPeerId;
+      let localStream, conn, sender, audioCtx, isHolding = false, myPeerId, remotePeerId, analyser, dataArray, remoteUserLi;
 
-      // Audio context for sounds
+      // Audio context for sounds & analysis
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-      // Get local stream early
+      // Get local stream
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         status.textContent = 'Mic ready. Getting peer ID...';
@@ -46,26 +54,26 @@
         return;
       }
 
-      // Check if joining (has ?id)
+      // Check if joining
       const url = new URL(window.location);
       const providedId = url.searchParams.get('id');
 
       peer.on('open', (myId) => {
         myPeerId = myId;
+        usersList.innerHTML = `<li>You (${myId.slice(0,8)})</li>`;
         if (providedId) {
-          // Joiner: Use provided ID to call
-          status.textContent = `Joining room...`;
+          // Joiner
+          status.textContent = `Joining ${providedId.slice(0,8)}...`;
           conn = peer.call(providedId, localStream);
           setupConnection(conn);
-          roomLinkEl.textContent = window.location.href; // Already has ?id
+          roomLinkEl.textContent = window.location.href;
         } else {
-          // Host: Use myId as room, update URL
+          // Host
           url.searchParams.set('id', myId);
           history.replaceState({}, '', url);
           roomLinkEl.textContent = window.location.href;
           status.textContent = `Room ready: ${myId.slice(0,8)}. Share link!`;
           talkBtn.disabled = false;
-          // Wait for incoming calls
           peer.on('call', (incoming) => {
             conn = incoming;
             conn.answer(localStream);
@@ -79,17 +87,44 @@
         sender = connection.peerConnection.getSenders().find(s => s.track?.kind === 'audio');
         connection.on('stream', (remoteStream) => {
           remoteAudio.srcObject = remoteStream;
+          remotePeerId = connection.peer; // Get remote peer ID
+          remoteUserLi = document.createElement('li');
+          remoteUserLi.textContent = `Friend (${remotePeerId.slice(0,8)})`;
+          usersList.appendChild(remoteUserLi);
           talkBtn.disabled = false;
           status.textContent = 'Connected! Hold to talk.';
+          // Setup audio analysis for remote speaking
+          const source = audioCtx.createMediaStreamSource(remoteStream);
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          const bufferLength = analyser.frequencyBinCount;
+          dataArray = new Uint8Array(bufferLength);
+          source.connect(analyser);
+          detectSpeaking();
         });
       }
 
-      // Hold to talk
+      // Detect remote speaking via volume
+      function detectSpeaking() {
+        if (!analyser) return;
+        const avg = (array) => array.reduce((a, b) => a + b) / array.length;
+        requestAnimationFrame(detectSpeaking);
+        analyser.getByteFrequencyData(dataArray);
+        const volume = avg(dataArray);
+        if (volume > 10) { // Threshold - adjust if needed
+          remoteUserLi.classList.add('speaking');
+        } else {
+          remoteUserLi.classList.remove('speaking');
+        }
+      }
+
+      // Hold to talk (self speaking)
       function startTalk() {
         if (!sender || isHolding || talkBtn.disabled) return;
         isHolding = true;
         talkBtn.classList.add('hold');
         sender.track.enabled = true;
+        usersList.children[0].classList.add('speaking'); // You speaking
         playBeep();
       }
       function stopTalk() {
@@ -97,10 +132,11 @@
         isHolding = false;
         talkBtn.classList.remove('hold');
         sender.track.enabled = false;
+        usersList.children[0].classList.remove('speaking'); // Stop self
         playStatic();
       }
 
-      // Events (enable after connection)
+      // Events
       talkBtn.addEventListener('mousedown', startTalk);
       talkBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startTalk(); });
       document.addEventListener('mouseup', stopTalk);
