@@ -6,24 +6,40 @@
   <title>Walky Talky</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    body { margin: 0; padding: 2rem 1rem; background: #000; color: #FFD700; font-family: 'Courier New', monospace; text-align: center; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+    body { margin: 0; padding: 2rem 1rem; background: #000; color: #FFD700; font-family: 'Courier New', monospace; text-align: center; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; touch-action: manipulation; }
     h1 { font-size: 2.5rem; margin: 0 0 1rem; text-shadow: 0 0 10px #FFD700; }
     p { font-size: 1rem; margin: 0.5rem 0; }
     #roomLink { background: #333; padding: 0.5rem; border-radius: 5px; word-break: break-all; font-family: monospace; }
-    #talkBtn { background: #FFD700; color: #000; border: none; border-radius: 50%; width: 120px; height: 120px; font-size: 3rem; cursor: pointer; box-shadow: 0 0 20px #FFD700; transition: all 0.1s; margin: 2rem 0; }
-    #talkBtn:active, #talkBtn.hold { transform: scale(0.95); box-shadow: 0 0 40px #fff; background: #fff; }
+    
+    /* دکمه بزرگ‌تر و لمسی بهتر در موبایل */
+    #talkBtn {
+      background: #FFD700; color: #000; border: none; border-radius: 50%; 
+      width: 140px; height: 140px; font-size: 3.5rem; cursor: pointer; 
+      box-shadow: 0 0 25px #FFD700; transition: all 0.15s ease; 
+      margin: 2rem auto; display: flex; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: manipulation;
+    }
+    #talkBtn:active, #talkBtn.hold {
+      transform: scale(0.92); box-shadow: 0 0 50px #fff; background: #fff;
+    }
+    
     #users { list-style: none; padding: 0; margin: 1rem 0; }
     #users li { padding: 0.5rem; background: #333; margin: 0.25rem; border-radius: 5px; }
     #users li.speaking { background: #FFD700; color: #000; animation: pulse 1s infinite; }
-    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
     footer { margin-top: auto; font-size: 0.8rem; color: #666; }
-    @media (max-width: 600px) { #talkBtn { width: 100px; height: 100px; font-size: 2.5rem; } h1 { font-size: 2rem; } }
+
+    /* موبایل: دکمه بزرگ‌تر */
+    @media (max-width: 600px) {
+      #talkBtn { width: 160px; height: 160px; font-size: 4rem; }
+      h1 { font-size: 2rem; }
+    }
   </style>
 </head>
 <body>
   <h1>Walky Talky</h1>
   <p id="status">Connecting...</p>
-  <button id="talkBtn" title="Hold to talk" disabled>🎤</button>
+  <button id="talkBtn" title="Hold to talk">Microphone</button>
   <p>Share this link with a friend. Hold spacebar or tap to talk. Release to listen.</p>
   <p id="roomLink">Generating room...</p>
   <ul id="users">
@@ -42,10 +58,8 @@
       const remoteAudio = document.getElementById('remoteAudio');
       let localStream, conn, sender, audioCtx, isHolding = false, myPeerId, remotePeerId, analyser, dataArray, remoteUserLi;
 
-      // Audio context for sounds & analysis
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-      // Get local stream
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         status.textContent = 'Mic ready. Getting peer ID...';
@@ -54,7 +68,6 @@
         return;
       }
 
-      // Check if joining
       const url = new URL(window.location);
       const providedId = url.searchParams.get('id');
 
@@ -62,18 +75,15 @@
         myPeerId = myId;
         usersList.innerHTML = `<li>You (${myId.slice(0,8)})</li>`;
         if (providedId) {
-          // Joiner
           status.textContent = `Joining ${providedId.slice(0,8)}...`;
           conn = peer.call(providedId, localStream);
           setupConnection(conn);
           roomLinkEl.textContent = window.location.href;
         } else {
-          // Host
           url.searchParams.set('id', myId);
           history.replaceState({}, '', url);
           roomLinkEl.textContent = window.location.href;
           status.textContent = `Room ready: ${myId.slice(0,8)}. Share link!`;
-          talkBtn.disabled = false;
           peer.on('call', (incoming) => {
             conn = incoming;
             conn.answer(localStream);
@@ -87,13 +97,11 @@
         sender = connection.peerConnection.getSenders().find(s => s.track?.kind === 'audio');
         connection.on('stream', (remoteStream) => {
           remoteAudio.srcObject = remoteStream;
-          remotePeerId = connection.peer; // Get remote peer ID
+          remotePeerId = connection.peer;
           remoteUserLi = document.createElement('li');
           remoteUserLi.textContent = `Friend (${remotePeerId.slice(0,8)})`;
           usersList.appendChild(remoteUserLi);
-          talkBtn.disabled = false;
           status.textContent = 'Connected! Hold to talk.';
-          // Setup audio analysis for remote speaking
           const source = audioCtx.createMediaStreamSource(remoteStream);
           analyser = audioCtx.createAnalyser();
           analyser.fftSize = 256;
@@ -104,58 +112,64 @@
         });
       }
 
-      // Detect remote speaking via volume
       function detectSpeaking() {
         if (!analyser) return;
         const avg = (array) => array.reduce((a, b) => a + b) / array.length;
         requestAnimationFrame(detectSpeaking);
         analyser.getByteFrequencyData(dataArray);
         const volume = avg(dataArray);
-        if (volume > 10) { // Threshold - adjust if needed
+        if (volume > 12) {
           remoteUserLi.classList.add('speaking');
         } else {
           remoteUserLi.classList.remove('speaking');
         }
       }
 
-      // Hold to talk (self speaking)
       function startTalk() {
-        if (!sender || isHolding || talkBtn.disabled) return;
+        if (!sender || isHolding) return;
         isHolding = true;
         talkBtn.classList.add('hold');
         sender.track.enabled = true;
-        usersList.children[0].classList.add('speaking'); // You speaking
+        usersList.children[0].classList.add('speaking');
         playBeep();
       }
+
       function stopTalk() {
         if (!isHolding) return;
         isHolding = false;
         talkBtn.classList.remove('hold');
         sender.track.enabled = false;
-        usersList.children[0].classList.remove('speaking'); // Stop self
+        usersList.children[0].classList.remove('speaking');
         playStatic();
       }
 
-      // Events
+      // لمس و ماوس — بدون preventDefault در touchstart
       talkBtn.addEventListener('mousedown', startTalk);
-      talkBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startTalk(); });
+      talkBtn.addEventListener('touchstart', startTalk, { passive: true });
       document.addEventListener('mouseup', stopTalk);
       document.addEventListener('touchend', stopTalk);
-      document.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); startTalk(); } });
-      document.addEventListener('keyup', (e) => { if (e.code === 'Space') stopTalk(); });
+      document.addEventListener('mouseleave', stopTalk); // اگر از دکمه خارج شد
 
-      // Sounds
+      document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !e.repeat) {
+          e.preventDefault();
+          startTalk();
+        }
+      });
+      document.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') stopTalk();
+      });
+
       function playBeep() {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
+        osc.connect(gain); gain.connect(audioCtx.destination);
         osc.frequency.value = 800;
         gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.1);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
       }
+
       function playStatic() {
         const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
         const data = buffer.getChannelData(0);
@@ -166,8 +180,7 @@
         source.connect(gain).connect(audioCtx.destination);
         gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-        source.start();
-        source.stop(audioCtx.currentTime + 0.1);
+        source.start(); source.stop(audioCtx.currentTime + 0.1);
       }
     })();
   </script>
