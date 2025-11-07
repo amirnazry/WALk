@@ -19,7 +19,7 @@
 <body>
   <h1>Walky Talky</h1>
   <p id="status">Connecting...</p>
-  <button id="talkBtn" title="Hold to talk">🎤</button>
+  <button id="talkBtn" title="Hold to talk" disabled>🎤</button>
   <p>Share this link with a friend. Hold spacebar or tap to talk. Release to listen.</p>
   <p id="roomLink">Generating room...</p>
   <audio id="remoteAudio" autoplay></audio>
@@ -32,60 +32,61 @@
       const status = document.getElementById('status');
       const roomLinkEl = document.getElementById('roomLink');
       const remoteAudio = document.getElementById('remoteAudio');
-      let localStream, conn, sender, audioCtx, isHolding = false;
+      let localStream, conn, sender, audioCtx, isHolding = false, myPeerId;
 
       // Audio context for sounds
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-      // Get local stream
+      // Get local stream early
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        status.textContent = 'Mic ready. Share link!';
+        status.textContent = 'Mic ready. Getting peer ID...';
       } catch (err) {
         status.textContent = 'Mic access denied. Enable to chat.';
         return;
       }
 
-      // Room ID from URL
+      // Check if joining (has ?id)
       const url = new URL(window.location);
-      const roomId = url.searchParams.get('id') || crypto.randomUUID().slice(0, 8);
-
-      // Update URL and link
-      if (!url.searchParams.get('id')) {
-        url.searchParams.set('id', roomId);
-        history.replaceState({}, '', url);
-      }
-      roomLinkEl.textContent = window.location.href;
+      const providedId = url.searchParams.get('id');
 
       peer.on('open', (myId) => {
-        status.textContent = `Room: ${roomId}. Your ID: ${myId.slice(0,8)}`;
+        myPeerId = myId;
+        if (providedId) {
+          // Joiner: Use provided ID to call
+          status.textContent = `Joining room...`;
+          conn = peer.call(providedId, localStream);
+          setupConnection(conn);
+          roomLinkEl.textContent = window.location.href; // Already has ?id
+        } else {
+          // Host: Use myId as room, update URL
+          url.searchParams.set('id', myId);
+          history.replaceState({}, '', url);
+          roomLinkEl.textContent = window.location.href;
+          status.textContent = `Room ready: ${myId.slice(0,8)}. Share link!`;
+          talkBtn.disabled = false;
+          // Wait for incoming calls
+          peer.on('call', (incoming) => {
+            conn = incoming;
+            conn.answer(localStream);
+            setupConnection(conn);
+            status.textContent = 'Connected! Hold to talk.';
+          });
+        }
       });
 
-      // If roomId provided, call (joiner)
-      if (url.searchParams.get('id')) {
-        conn = peer.call(roomId, localStream);
-        setupConnection(conn);
-      } else {
-        // Host: wait for calls
-        peer.on('call', (incoming) => {
-          conn = incoming;
-          conn.answer(localStream);
-          setupConnection(conn);
-        });
-      }
-
       function setupConnection(connection) {
-        // Fixed: Use peerConnection.getSenders()
         sender = connection.peerConnection.getSenders().find(s => s.track?.kind === 'audio');
         connection.on('stream', (remoteStream) => {
           remoteAudio.srcObject = remoteStream;
+          talkBtn.disabled = false;
           status.textContent = 'Connected! Hold to talk.';
         });
       }
 
       // Hold to talk
       function startTalk() {
-        if (!sender || isHolding) return;
+        if (!sender || isHolding || talkBtn.disabled) return;
         isHolding = true;
         talkBtn.classList.add('hold');
         sender.track.enabled = true;
@@ -99,7 +100,7 @@
         playStatic();
       }
 
-      // Events
+      // Events (enable after connection)
       talkBtn.addEventListener('mousedown', startTalk);
       talkBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startTalk(); });
       document.addEventListener('mouseup', stopTalk);
